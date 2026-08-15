@@ -1,0 +1,39 @@
+{
+  "name": "opencode-mattpocock-skills",
+  "version": "0.1.0",
+  "description": "OpenCode plugin that synchronizes Matt Pocock's skills into a local cache",
+  "type": "module",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.js"
+    }
+  },
+  "files": [
+    "index.js",
+    "index.d.ts",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test",
+    "check": "node --check index.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kevbob1/opencode-mattpocock-skills.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kevbob1/opencode-mattpocock-skills/issues"
+  },
+  "homepage": "https://github.com/kevbob1/opencode-mattpocock-skills#readme",
+  "publishConfig": {
+    "access": "public"
+  }
+}
