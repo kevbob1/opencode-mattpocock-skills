@@ -20,21 +20,30 @@ export interface SyncSkillsResult {
 
 export function syncSkills(options?: SyncSkillsOptions): Promise<SyncSkillsResult>;
 
-export interface PluginContext {
-  options?: Omit<SyncSkillsOptions, "logger">;
-  skill: {
-    transform(callback: (editor: { add(skill: OpenCodeSkill): void }) => void): Promise<unknown>;
-    reload(): Promise<void>;
-  };
-}
-
-export interface OpenCodeSkill {
+export interface SkillInfo {
   id: string;
   name: string;
   description: string;
-  location: string;
+  path: string;
   content: string;
   autoinvoke?: boolean;
+}
+
+export interface SkillEditor {
+  add(skill: SkillInfo): void;
+  list(): readonly SkillInfo[];
+  get(id: string): SkillInfo | undefined;
+  update(id: string, update: (skill: SkillInfo) => void): void;
+  remove(id: string): void;
+}
+
+export interface PluginContext {
+  options?: Omit<SyncSkillsOptions, "logger">;
+  skill: {
+    transform(callback: (editor: SkillEditor) => void): Promise<unknown>;
+    reload(): Promise<void>;
+    list(): Promise<readonly SkillInfo[]>;
+  };
 }
 
 export interface PluginDefinition {

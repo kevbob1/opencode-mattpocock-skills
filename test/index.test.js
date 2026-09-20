@@ -52,7 +52,7 @@ test("installs, skips a not-due update, and forwards tuple options to OpenCode",
   });
   assert.equal(typeof instance, "function");
   assert.deepEqual(added.map((skill) => skill.id), ["alpha", "beta-skill"]);
-  assert.equal(added[0].location, join(first.path, "alpha", "SKILL.md"));
+  assert.equal(added[0].path, join(first.path, "alpha", "SKILL.md"));
   assert.equal(added[0].content, "one");
   assert.equal(added[1].description, "Test skill");
   assert.equal(added[1].autoinvoke, false);

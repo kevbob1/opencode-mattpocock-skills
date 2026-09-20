@@ -126,7 +126,7 @@ async function readSkills(snapshot) {
       id: frontmatter.name || name,
       name: frontmatter.name || name,
       description: frontmatter.description ?? "",
-      location: path,
+      path,
       content
     };
     if (frontmatter["disable-model-invocation"] === true) skill.autoinvoke = false;
