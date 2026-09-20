@@ -64,17 +64,92 @@ export async function syncSkills(input = {}) {
   }
 }
 
-/** OpenCode plugin hook: adds the active snapshot before skill discovery. */
-export default async function mattPocockSkillsPlugin({ client }, pluginOptions = {}) {
-  const logger = (entry) => client.app.log({ body: { service: "opencode-mattpocock-skills", ...entry } });
-  return {
-    async config(config) {
-      const result = await syncSkills({ ...pluginOptions, logger });
-      config.skills ??= {};
-      config.skills.paths ??= [];
-      if (!config.skills.paths.includes(result.path)) config.skills.paths.push(result.path);
+const PLUGIN_ID = "opencode-mattpocock-skills";
+const REFRESH_CHECK_MINUTES = 60;
+
+/** OpenCode V2 plugin: syncs the snapshot and registers its skills. */
+export default {
+  id: PLUGIN_ID,
+  async setup(ctx) {
+    const pluginOptions = ctx.options && typeof ctx.options === "object" ? ctx.options : {};
+    const logger = (entry) => {
+      const text = `[${PLUGIN_ID}] ${entry.message}${entry.error ? `: ${entry.error}` : ""}`;
+      if (entry.level === "error") console.error(text);
+      else if (entry.level === "warn") console.warn(text);
+      else console.log(text);
+    };
+    const skills = { current: [] };
+    const result = await syncSkills({ ...pluginOptions, logger });
+    skills.current = await readSkills(result.path);
+    await ctx.skill.transform((editor) => {
+      for (const skill of skills.current) editor.add(skill);
+    });
+    const timer = setInterval(() => {
+      void (async () => {
+        const refreshed = await syncSkills({ ...pluginOptions, logger });
+        if (!refreshed.updated) return;
+        skills.current = await readSkills(refreshed.path);
+        await ctx.skill.reload();
+        logger({ level: "info", message: "Registered refreshed skills snapshot", path: refreshed.path, commit: refreshed.commit });
+      })().catch((error) => logger({ level: "warn", message: "Skills refresh failed", error: error.message }));
+    }, REFRESH_CHECK_MINUTES * 60_000);
+    return () => clearInterval(timer);
+  }
+};
+
+/** Read every SKILL.md below the snapshot and map it to an OpenCode skill. */
+async function readSkills(snapshot) {
+  const files = [];
+  for (const category of await readdir(snapshot, { withFileTypes: true })) {
+    if (!category.isDirectory() || category.name.startsWith(".")) continue;
+    const categoryPath = join(snapshot, category.name);
+    const direct = join(categoryPath, "SKILL.md");
+    if (await exists(direct)) {
+      files.push({ path: direct, name: category.name });
+      continue;
     }
-  };
+    for (const skill of await readdir(categoryPath, { withFileTypes: true })) {
+      if (skill.name.startsWith(".")) continue;
+      if (skill.isFile() && skill.name === "SKILL.md") {
+        files.push({ path: join(categoryPath, skill.name), name: skillName(category.name) });
+        continue;
+      }
+      if (!skill.isDirectory()) continue;
+      const file = join(categoryPath, skill.name, "SKILL.md");
+      if (await exists(file)) files.push({ path: file, name: skillName(skill.name) });
+    }
+  }
+  return Promise.all(files.map(async ({ path, name }) => {
+    const content = await readFile(path, "utf8");
+    const frontmatter = parseFrontmatter(content);
+    const skill = {
+      id: frontmatter.name || name,
+      name: frontmatter.name || name,
+      description: frontmatter.description ?? "",
+      location: path,
+      content
+    };
+    if (frontmatter["disable-model-invocation"] === true) skill.autoinvoke = false;
+    return skill;
+  }));
+}
+
+function skillName(directory) {
+  return directory.replace(/^\d+[-_.]/, "");
+}
+
+/** Parse a minimal `---` frontmatter block: name, description, disable-model-invocation. */
+function parseFrontmatter(content) {
+  const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(content);
+  if (!match) return {};
+  const result = {};
+  for (const line of match[1].split(/\r?\n/)) {
+    const entry = /^([A-Za-z][\w-]*):\s*(.*)$/.exec(line);
+    if (!entry) continue;
+    const value = entry[2].trim().replace(/^["']|["']$/g, "");
+    result[entry[1]] = value === "true" ? true : value === "false" ? false : value;
+  }
+  return result;
 }
 
 function validateOptions(input) {
@@ -92,8 +167,8 @@ function validateOptions(input) {
 async function update(root, options, previous) {
   const bare = join(root, "repository.git");
   if (!(await exists(bare))) await git(["init", "--bare", bare], root, options);
-  await git(["fetch", "--force", "--no-tags", options.repository, `+${options.ref}:refs/opencode/source`], bare, options);
-  const commit = (await git(["rev-parse", "refs/opencode/source^{commit}"], bare, options)).trim();
+  await git(["fetch", "--force", "--no-tags", options.repository, options.ref], bare, options);
+  const commit = (await git(["rev-parse", "FETCH_HEAD^{commit}"], bare, options)).trim();
   const tree = join(root, "worktree");
   await rm(tree, { recursive: true, force: true });
   await mkdir(tree, { recursive: true });

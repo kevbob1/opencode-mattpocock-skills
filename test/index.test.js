@@ -26,7 +26,7 @@ function options(extra = {}) { return { repository, cacheDirectory: cache, updat
 async function setup() {
   root = await mkdtemp(join(tmpdir(), "matt-skills-"));
   repository = join(root, "repo"); cache = join(root, "cache");
-  await mkdir(repository); await git(["init", "-b", "main"]); await publish({ "skills/alpha/SKILL.md": "one", "skills/in-progress/SKILL.md": "skip", "skills/alpha/nested/in-progress/SKILL.md": "keep" });
+  await mkdir(repository); await git(["init", "-b", "main"]); await publish({ "skills/alpha/SKILL.md": "one", "skills/in-progress/SKILL.md": "skip", "skills/alpha/nested/in-progress/SKILL.md": "keep", "skills/beta/SKILL.md": "---\nname: beta-skill\ndescription: Test skill\ndisable-model-invocation: true\n---\nbody" });
 }
 async function teardown() { await rm(root, { recursive: true, force: true }); }
 
@@ -42,13 +42,21 @@ test("installs, skips a not-due update, and forwards tuple options to OpenCode",
   assert.equal(second.updated, false);
   assert.equal(second.path, first.path);
   assert.equal(logs.at(-1).level, "info");
-  const appLogs = [];
-  const instance = await plugin({ client: { app: { log: (entry) => appLogs.push(entry) } } }, options());
-  const config = { skills: { paths: ["local"] } };
-  await instance.config(config);
-  assert.equal(config.skills.paths[0], "local");
-  assert.equal(config.skills.paths[1], join(cache, (await readdir(cache))[0], "current"));
-  assert.equal(appLogs[0].body.service, "opencode-mattpocock-skills");
+  const added = [];
+  const instance = await plugin.setup({
+    options: options(),
+    skill: {
+      transform: async (callback) => callback({ add: (skill) => added.push(skill) }),
+      reload: async () => {}
+    }
+  });
+  assert.equal(typeof instance, "function");
+  assert.deepEqual(added.map((skill) => skill.id), ["alpha", "beta-skill"]);
+  assert.equal(added[0].location, join(first.path, "alpha", "SKILL.md"));
+  assert.equal(added[0].content, "one");
+  assert.equal(added[1].description, "Test skill");
+  assert.equal(added[1].autoinvoke, false);
+  await instance();
 });
 
 test("retains the current and previously activated snapshots", async () => {

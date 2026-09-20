@@ -20,8 +20,27 @@ export interface SyncSkillsResult {
 
 export function syncSkills(options?: SyncSkillsOptions): Promise<SyncSkillsResult>;
 
-declare function mattPocockSkillsPlugin(input: { client: { app: { log(input: { body: Record<string, unknown> }): unknown } } }, options?: Omit<SyncSkillsOptions, "logger">): Promise<{
-  config(config: { skills?: { paths?: string[] } }): Promise<void>;
-}>;
+export interface PluginContext {
+  options?: Omit<SyncSkillsOptions, "logger">;
+  skill: {
+    transform(callback: (editor: { add(skill: OpenCodeSkill): void }) => void): Promise<unknown>;
+    reload(): Promise<void>;
+  };
+}
 
+export interface OpenCodeSkill {
+  id: string;
+  name: string;
+  description: string;
+  location: string;
+  content: string;
+  autoinvoke?: boolean;
+}
+
+export interface PluginDefinition {
+  id: string;
+  setup(context: PluginContext): Promise<(() => void) | void>;
+}
+
+declare const mattPocockSkillsPlugin: PluginDefinition;
 export default mattPocockSkillsPlugin;

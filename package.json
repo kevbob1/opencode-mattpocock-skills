@@ -1,6 +1,6 @@
 {
   "name": "opencode-mattpocock-skills",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "OpenCode plugin that synchronizes Matt Pocock's skills into a local cache",
   "type": "module",
   "main": "index.js",
