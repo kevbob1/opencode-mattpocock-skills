@@ -43,7 +43,7 @@ test("installs, skips a not-due update, and forwards tuple options to OpenCode",
   assert.equal(second.path, first.path);
   assert.equal(logs.at(-1).level, "info");
   const appLogs = [];
-  const instance = await plugin({ client: { app: { log: (entry) => appLogs.push(entry) } } }, options());
+  const instance = await plugin(options(), { client: { app: { log: (entry) => appLogs.push(entry) } } });
   const config = { skills: { paths: ["local"] } };
   await instance.config(config);
   assert.equal(config.skills.paths[0], "local");
@@ -51,7 +51,7 @@ test("installs, skips a not-due update, and forwards tuple options to OpenCode",
   assert.equal(appLogs[0].body.service, "opencode-mattpocock-skills");
 });
 
-test("keeps plugin options strict and rejects unsupported client options", async () => {
+test("keeps plugin options strict and rejects unsupported plugin options", async () => {
   const context = { client: { app: { log() {} } } };
   const instance = await plugin(options(), context);
   const config = {};
@@ -59,24 +59,49 @@ test("keeps plugin options strict and rejects unsupported client options", async
   assert.equal(config.skills.paths.length, 1);
   assert.equal(await readFile(join(config.skills.paths[0], "alpha", "SKILL.md"), "utf8"), "one");
 
-  const invalidClient = await plugin({ ...options(), client: {} }, context);
-  await assert.rejects(invalidClient.config({}), /Unknown option: client/);
+  const invalidClient = await plugin({ ...options(), nope: true }, context);
+  await assert.rejects(invalidClient.config({}), /Unknown option: nope/);
   const invalid = await plugin({ ...options(), nope: true }, context);
   await assert.rejects(invalid.config({}), /Unknown option: nope/);
-  await assert.rejects(syncSkills(options({ client: {} })), /Unknown option: client/);
+  const result = await syncSkills(options({ client: {} }));
+  assert.equal(await readFile(join(result.path, "alpha", "SKILL.md"), "utf8"), "one");
+  await assert.rejects(syncSkills(options({ arbitrary: { value: true } })), /Unknown option: arbitrary/);
 });
 
-test("accepts the OpenCode options-first plugin invocation contract", async () => {
+test("accepts OpenCode context-first invocation without treating its client as a plugin option", async () => {
   const logs = [];
   const context = { client: { app: { log: (entry) => logs.push(entry) } } };
-  const instance = await plugin(options(), context);
+  const instance = await plugin(context, { updateIntervalHours: 12, exclude: ["in-progress"], repository, cacheDirectory: cache });
   const config = {};
 
   await instance.config(config);
 
   assert.equal(config.skills.paths.length, 1);
   assert.equal(await readFile(join(config.skills.paths[0], "alpha", "SKILL.md"), "utf8"), "one");
+  assert.equal(await readFile(join(config.skills.paths[0], "in-progress", "SKILL.md")).then(() => true, () => false), false);
   assert.equal(logs[0].body.service, "opencode-mattpocock-skills");
+});
+
+test("registers configured GitHub source with exact tuple options and injected client", async () => {
+  const logs = [];
+  const instance = await plugin({ updateIntervalHours: 12, exclude: ["in-progress"], repository, cacheDirectory: cache }, {
+    client: { app: { log: (entry) => logs.push(entry) } }
+  });
+  const config = {};
+
+  await instance.config(config);
+
+  assert.equal(config.skills.paths.length, 1);
+  assert.equal(await readFile(join(config.skills.paths[0], "alpha", "SKILL.md"), "utf8"), "one");
+  await assert.rejects(readFile(join(config.skills.paths[0], "in-progress", "SKILL.md")));
+  assert.equal(logs[0].body.service, "opencode-mattpocock-skills");
+});
+
+test("syncSkills accepts the actual OpenCode plugin context separately from tuple options", async () => {
+  const context = { client: { app: { log() {} } } };
+  const result = await syncSkills({ updateIntervalHours: 12, exclude: ["in-progress"], repository, cacheDirectory: cache }, context);
+  assert.equal(await readFile(join(result.path, "alpha", "SKILL.md"), "utf8"), "one");
+  await assert.rejects(readFile(join(result.path, "in-progress", "SKILL.md")));
 });
 
 test("retains the current and previously activated snapshots", async () => {
@@ -143,6 +168,7 @@ test("removes abandoned temporary snapshots while preserving completed snapshots
 
 test("rejects invalid options and throws on an initial missing source directory", async () => {
   await assert.rejects(syncSkills(options({ nope: true })), /Unknown option/);
+  await assert.rejects(syncSkills(options({ arbitrary: "value" })), /Unknown option: arbitrary/);
   await assert.rejects(syncSkills(options({ exclude: ["nested/name"] })), /exclude/);
   await assert.rejects(syncSkills(options({ sourceDirectory: "missing" })), /Source directory/);
 });

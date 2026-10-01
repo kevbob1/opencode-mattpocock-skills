@@ -18,8 +18,14 @@ const DEFAULTS = {
 const OPTION_NAMES = new Set([...Object.keys(DEFAULTS), "cacheDirectory", "logger"]);
 
 /** Synchronize a pinned source tree into an immutable local snapshot. */
-export async function syncSkills(input = {}) {
-  const options = validateOptions(input);
+export async function syncSkills(input = {}, context) {
+  const pluginOptions = isPluginContext(input) ? context ?? {} : input;
+  let optionsInput = pluginOptions;
+  if (optionsInput && typeof optionsInput === "object" && !Array.isArray(optionsInput)) {
+    optionsInput = { ...optionsInput };
+    delete optionsInput.client;
+  }
+  const options = validateOptions(optionsInput);
   const log = options.logger ?? (() => {});
   const cacheRoot = resolve(options.cacheDirectory ?? join(process.env.XDG_CACHE_HOME ?? join(homedir(), ".cache"), "opencode-mattpocock-skills"));
   const key = hash(JSON.stringify({ repository: options.repository, ref: options.ref, sourceDirectory: options.sourceDirectory, exclude: options.exclude }));
@@ -72,7 +78,7 @@ export default async function mattPocockSkillsPlugin(first = {}, second = {}) {
   const logger = (entry) => client.app.log({ body: { service: "opencode-mattpocock-skills", ...entry } });
   return {
     async config(config) {
-      const result = await syncSkills({ ...pluginOptions, logger });
+      const result = await syncSkills({ ...pluginOptions, logger }, context);
       config.skills ??= {};
       config.skills.paths ??= [];
       if (!config.skills.paths.includes(result.path)) config.skills.paths.push(result.path);
