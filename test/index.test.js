@@ -51,6 +51,19 @@ test("installs, skips a not-due update, and forwards tuple options to OpenCode",
   assert.equal(appLogs[0].body.service, "opencode-mattpocock-skills");
 });
 
+test("ignores the loader client in plugin options without relaxing sync option validation", async () => {
+  const input = { client: { app: { log() {} } } };
+  const instance = await plugin(input, options({ client: {} }));
+  const config = {};
+  await instance.config(config);
+  assert.equal(config.skills.paths.length, 1);
+  assert.equal(await readFile(join(config.skills.paths[0], "alpha", "SKILL.md"), "utf8"), "one");
+
+  const invalid = await plugin(input, options({ client: {}, nope: true }));
+  await assert.rejects(invalid.config({}), /Unknown option: nope/);
+  await assert.rejects(syncSkills(options({ client: {} })), /Unknown option: client/);
+});
+
 test("retains the current and previously activated snapshots", async () => {
   const first = await syncSkills(options());
   await publish({ "skills/alpha/SKILL.md": "two" });
