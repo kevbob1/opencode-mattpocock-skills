@@ -51,17 +51,32 @@ test("installs, skips a not-due update, and forwards tuple options to OpenCode",
   assert.equal(appLogs[0].body.service, "opencode-mattpocock-skills");
 });
 
-test("ignores the loader client in plugin options without relaxing sync option validation", async () => {
-  const input = { client: { app: { log() {} } } };
-  const instance = await plugin(input, options({ client: {} }));
+test("keeps plugin options strict and rejects unsupported client options", async () => {
+  const context = { client: { app: { log() {} } } };
+  const instance = await plugin(options(), context);
   const config = {};
   await instance.config(config);
   assert.equal(config.skills.paths.length, 1);
   assert.equal(await readFile(join(config.skills.paths[0], "alpha", "SKILL.md"), "utf8"), "one");
 
-  const invalid = await plugin(input, options({ client: {}, nope: true }));
+  const invalidClient = await plugin({ ...options(), client: {} }, context);
+  await assert.rejects(invalidClient.config({}), /Unknown option: client/);
+  const invalid = await plugin({ ...options(), nope: true }, context);
   await assert.rejects(invalid.config({}), /Unknown option: nope/);
   await assert.rejects(syncSkills(options({ client: {} })), /Unknown option: client/);
+});
+
+test("accepts the OpenCode options-first plugin invocation contract", async () => {
+  const logs = [];
+  const context = { client: { app: { log: (entry) => logs.push(entry) } } };
+  const instance = await plugin(options(), context);
+  const config = {};
+
+  await instance.config(config);
+
+  assert.equal(config.skills.paths.length, 1);
+  assert.equal(await readFile(join(config.skills.paths[0], "alpha", "SKILL.md"), "utf8"), "one");
+  assert.equal(logs[0].body.service, "opencode-mattpocock-skills");
 });
 
 test("retains the current and previously activated snapshots", async () => {

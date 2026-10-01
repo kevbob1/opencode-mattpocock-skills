@@ -65,17 +65,23 @@ export async function syncSkills(input = {}) {
 }
 
 /** OpenCode plugin hook: adds the active snapshot before skill discovery. */
-export default async function mattPocockSkillsPlugin({ client }, pluginOptions = {}) {
+export default async function mattPocockSkillsPlugin(first = {}, second = {}) {
+  const context = isPluginContext(second) ? second : first;
+  const pluginOptions = context === second ? first : second;
+  const { client } = context;
   const logger = (entry) => client.app.log({ body: { service: "opencode-mattpocock-skills", ...entry } });
-  const { client: _loaderClient, ...syncOptions } = pluginOptions;
   return {
     async config(config) {
-      const result = await syncSkills({ ...syncOptions, logger });
+      const result = await syncSkills({ ...pluginOptions, logger });
       config.skills ??= {};
       config.skills.paths ??= [];
       if (!config.skills.paths.includes(result.path)) config.skills.paths.push(result.path);
     }
   };
+}
+
+function isPluginContext(value) {
+  return typeof value?.client?.app?.log === "function";
 }
 
 function validateOptions(input) {
